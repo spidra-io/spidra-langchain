@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "langchain-spidra"
 version = "0.1.0"
-description = "LangChain document loader for Spidra web scraping API"
+description = "An integration package connecting Spidra and LangChain"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.9"
@@ -18,15 +18,37 @@ classifiers = [
 ]
 dependencies = [
     "spidra>=0.3.0",
-    "langchain-core>=0.1.0",
+    "langchain-core>=0.3.0,<2.0.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "langchain-core>=0.1.0"]
+test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+lint = [
+    "ruff>=0.5.0",
+]
+typing = [
+    "mypy>=1.10.0",
+    "langchain-core>=0.3.0,<2.0.0",
+]
+dev = [
+    "langchain-spidra[test,lint,typing]",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
+testpaths = ["tests/unit_tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.mypy]
+disallow_untyped_defs = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["langchain_spidra"]
