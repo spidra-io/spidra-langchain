@@ -1,78 +1,73 @@
 # langchain-spidra
 
-LangChain document loader for the [Spidra](https://spidra.io) web scraping API.
+[![PyPI - Version](https://img.shields.io/pypi/v/langchain-spidra?label=%20)](https://pypi.org/project/langchain-spidra/#history)
+[![PyPI - License](https://img.shields.io/pypi/l/langchain-spidra)](https://opensource.org/licenses/MIT)
 
-## Installation
+This package contains the LangChain integration with [Spidra](https://spidra.io),
+an AI-powered web scraping and crawling API. It lets you scrape, crawl, and
+batch-scrape the web — as a document loader for RAG pipelines or as agent tools.
+
+## Quick Install
 
 ```bash
 pip install langchain-spidra
 ```
 
-## Usage
+Get an API key from [spidra.io](https://spidra.io) and set it as the
+`SPIDRA_API_KEY` environment variable (or pass `api_key=...`).
 
-### Scrape a single URL (raw markdown — best for RAG)
+```bash
+export SPIDRA_API_KEY="spd-your-api-key"
+```
+
+## Document loader
+
+`SpidraLoader` loads web content as LangChain `Document`s. Pick a `mode`:
+`scrape` (one page), `crawl` (a whole site), or `batch` (many URLs in parallel).
 
 ```python
 from langchain_spidra import SpidraLoader
 
-loader = SpidraLoader("https://example.com", api_key="spd_...")
+# Scrape a single page
+loader = SpidraLoader(url="https://example.com", mode="scrape")
 docs = loader.load()
-```
+print(docs[0].page_content[:200])
+print(docs[0].metadata)
 
-### Scrape with AI extraction
-
-```python
-loader = SpidraLoader(
-    "https://example.com",
-    api_key="spd_...",
-    params={"prompt": "Extract product names and prices", "output": "json"},
-)
+# Crawl an entire docs site
+loader = SpidraLoader(url="https://docs.example.com", mode="crawl")
 docs = loader.load()
-```
 
-### Crawl an entire site
-
-```python
-loader = SpidraLoader(
-    "https://docs.example.com",
-    mode="crawl",
-    api_key="spd_...",
-    params={
-        "crawl_instruction": "Find all documentation pages",
-        "transform_instruction": "Return the page content as clean markdown",
-        "max_pages": 50,
-    },
-)
-docs = loader.load()
-```
-
-### Batch scrape many URLs
-
-```python
+# Batch scrape many URLs
 loader = SpidraLoader(
     urls=["https://a.com", "https://b.com", "https://c.com"],
     mode="batch",
-    api_key="spd_...",
 )
 docs = loader.load()
 ```
 
-### Use with a vector store
+## Tools
+
+Each Spidra capability is also available as a `BaseTool` you can bind to an
+agent:
 
 ```python
-from langchain_community.vectorstores import FAISS
-from langchain_openai import OpenAIEmbeddings
+from langchain_spidra import SpidraScrape, SpidraCrawl, SpidraBatchScrape
 
-loader = SpidraLoader("https://docs.example.com", mode="crawl", api_key="spd_...")
-docs = loader.load()
+scrape = SpidraScrape()
+result = scrape.invoke({"url": "https://example.com"})
+print(result["content"])
 
-vectorstore = FAISS.from_documents(docs, OpenAIEmbeddings())
+crawl = SpidraCrawl()
+pages = crawl.invoke({"url": "https://docs.example.com", "max_pages": 20})
+for page in pages:
+    print(page["url"], page["data"][:100])
+
+batch = SpidraBatchScrape()
+items = batch.invoke({"urls": ["https://a.com", "https://b.com"]})
 ```
 
-## Environment variable
+## Documentation
 
-Set `SPIDRA_API_KEY` to avoid passing `api_key` explicitly:
-
-```bash
-export SPIDRA_API_KEY=spd_...
-```
+- Spidra docs: [docs.spidra.io](https://docs.spidra.io)
+- Spidra homepage: [spidra.io](https://spidra.io)

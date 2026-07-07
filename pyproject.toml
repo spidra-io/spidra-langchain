@@ -6,49 +6,81 @@ build-backend = "hatchling.build"
 name = "langchain-spidra"
 version = "0.1.0"
 description = "An integration package connecting Spidra and LangChain"
-readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.9"
-keywords = ["langchain", "spidra", "web-scraping", "rag", "document-loader"]
+readme = "README.md"
 classifiers = [
-    "Programming Language :: Python :: 3",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
-    "Topic :: Internet :: WWW/HTTP",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
+requires-python = ">=3.9,<4.0.0"
 dependencies = [
     "spidra>=0.3.0",
     "langchain-core>=0.3.0,<2.0.0",
 ]
 
+[project.urls]
+Homepage = "https://spidra.io"
+Documentation = "https://docs.spidra.io"
+Repository = "https://github.com/spidra-io/spidra-langchain"
+Issues = "https://github.com/spidra-io/spidra-langchain/issues"
+
 [project.optional-dependencies]
 test = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
+    "pytest-mock>=3.10.0",
+    "pytest-socket>=0.7.0",
+    "langchain-tests>=0.3.0",
 ]
-lint = [
-    "ruff>=0.5.0",
-]
+lint = ["ruff>=0.5.0"]
 typing = [
     "mypy>=1.10.0",
     "langchain-core>=0.3.0,<2.0.0",
 ]
-dev = [
-    "langchain-spidra[test,lint,typing]",
-]
+dev = ["langchain-spidra[test,lint,typing]"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["langchain_spidra"]
 
 [tool.pytest.ini_options]
+addopts = "--strict-markers --strict-config --durations=5"
+markers = [
+    "compile: mark placeholder test used to compile integration tests without running them",
+]
 asyncio_mode = "auto"
 testpaths = ["tests/unit_tests"]
+
+[tool.mypy]
+disallow_untyped_defs = true
 
 [tool.ruff]
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP"]
+select = [
+    "E",   # pycodestyle error
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "W",   # pycodestyle warning
+]
+ignore = [
+    "COM812",
+    "ISC001",
+]
 
-[tool.mypy]
-disallow_untyped_defs = true
-
-[tool.hatch.build.targets.wheel]
-packages = ["langchain_spidra"]
+[tool.ruff.lint.extend-per-file-ignores]
+"tests/**/*.py" = [
+    "S101",  # Tests need assertions
+]
+"scripts/*.py" = [
+    "INP001",  # Not a package
+]

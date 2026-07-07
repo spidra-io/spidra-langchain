@@ -1,23 +1,19 @@
+"""Spidra document loader.
+
+Supports scraping, crawling, and batch-scraping via the Spidra API. The
+canonical class is :class:`SpidraLoader`.
+"""
+
 from __future__ import annotations
 
 import json
-import os
-from typing import Any, Dict, Iterator, List, Literal, Optional
+from collections.abc import Iterator
+from typing import Any, Literal
 
 from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
 
-from spidra import (
-    Spidra,
-    ScrapeParams,
-    ScrapeUrl,
-    CrawlParams,
-    BatchScrapeParams,
-    PollOptions,
-)
-
-_SCRAPE_CONTENT_SEPARATOR = "\n\n---\n\n"
-_CONTENT_FROM_PREFIX = "Content from: "
+from langchain_spidra._utilities import create_client, resolve_api_key
 
 
 def _to_str(content: Any) -> str:
@@ -29,28 +25,14 @@ def _to_str(content: Any) -> str:
     return json.dumps(content, ensure_ascii=False)
 
 
-def _poll_kwargs(po: Optional[PollOptions]) -> Dict[str, Any]:
-    """Convert a PollOptions object to keyword arguments for the new client API."""
-    if po is None:
-        return {}
-    return {"poll_interval": po.poll_interval, "timeout": po.timeout}
+_SCRAPE_CONTENT_SEPARATOR = "\n\n---\n\n"
+_CONTENT_FROM_PREFIX = "Content from: "
 
 
-def _split_multi_url_content(content: str, urls: List[str]) -> List[tuple[str, str]]:
-    """
-    Split raw multi-URL scrape content into per-URL (source_url, text) pairs.
-
-    The worker concatenates sections using the format:
-        Content from: https://example.com
-        [markdown body]
-
-        ---
-
-        Content from: https://other.com
-        [markdown body]
-    """
+def _split_multi_url_content(content: str, urls: list[str]) -> list[tuple[str, str]]:
+    """Split raw multi-URL scrape content into per-URL (source_url, text) pairs."""
     sections = content.split(_SCRAPE_CONTENT_SEPARATOR)
-    result: List[tuple[str, str]] = []
+    result: list[tuple[str, str]] = []
 
     for i, section in enumerate(sections):
         section = section.strip()
@@ -61,7 +43,7 @@ def _split_multi_url_content(content: str, urls: List[str]) -> List[tuple[str, s
         first_line = lines[0].strip()
 
         if first_line.startswith(_CONTENT_FROM_PREFIX):
-            source = first_line[len(_CONTENT_FROM_PREFIX):].strip()
+            source = first_line[len(_CONTENT_FROM_PREFIX) :].strip()
             text = lines[1].strip() if len(lines) > 1 else ""
         else:
             source = urls[i] if i < len(urls) else ""
@@ -73,100 +55,81 @@ def _split_multi_url_content(content: str, urls: List[str]) -> List[tuple[str, s
 
 
 class SpidraLoader(BaseLoader):
-    """
-    LangChain document loader backed by the Spidra web scraping API.
+    """Spidra document loader integration.
 
-    Supports three modes:
+    Setup:
+        Install ``langchain-spidra`` and set the environment variable
+        ``SPIDRA_API_KEY``.
 
-    - ``scrape``: Scrape 1–3 URLs. Without a ``prompt``, returns raw markdown
-      as one Document per URL (ideal for RAG indexing). With a ``prompt``,
-      returns a single Document containing the AI-extracted result.
+        ```bash
+        pip install -U langchain-spidra
+        export SPIDRA_API_KEY="your-api-key"
+        ```
 
-    - ``crawl``: Crawl an entire site from ``url``, yielding one Document per
-      discovered page.
+    Instantiate:
+        ```python
+        from langchain_spidra import SpidraLoader
 
-    - ``batch``: Scrape 1–50 URLs in parallel, yielding one Document per URL.
+        # Scrape a single page
+        loader = SpidraLoader(url="https://example.com", api_key="spd_...")
 
-    Args:
-        url: The URL to scrape or crawl (required for ``scrape`` / ``crawl`` modes).
-        urls: List of URLs (used for ``batch`` mode or multi-URL scrape).
-        api_key: Spidra API key. Falls back to ``SPIDRA_API_KEY`` env var.
-        api_url: Override the base API URL (defaults to ``https://api.spidra.io/api``).
-        mode: One of ``"scrape"``, ``"crawl"``, or ``"batch"``.
-        params: Extra parameters forwarded to the underlying SDK method.
-            For scrape/batch: ``prompt``, ``output``, ``use_proxy``, ``proxy_country``,
-            ``extract_content_only``, ``schema``, ``screenshot``, etc.
-            For crawl: ``crawl_instruction``, ``transform_instruction``, ``max_pages``,
-            ``use_proxy``, ``proxy_country``, etc.
-        poll_options: Override polling behaviour (timeout, interval).
+        # Crawl an entire site
+        loader = SpidraLoader(url="https://docs.example.com", mode="crawl")
 
-    Usage::
+        # Batch scrape multiple URLs
+        loader = SpidraLoader(urls=["https://a.com", "https://b.com"], mode="batch")
+        ```
 
-        # Raw markdown — best for RAG / vector store indexing
-        loader = SpidraLoader("https://example.com", api_key="spd_...")
-        docs = loader.load()
-
-        # AI extraction
-        loader = SpidraLoader(
-            "https://example.com",
-            api_key="spd_...",
-            params={"prompt": "Extract product names and prices", "output": "json"},
-        )
-
-        # Crawl a whole docs site
-        loader = SpidraLoader(
-            "https://docs.example.com",
-            mode="crawl",
-            api_key="spd_...",
-            params={
-                "crawl_instruction": "Find all documentation pages",
-                "transform_instruction": "Return the page content as clean markdown",
-                "max_pages": 50,
-            },
-        )
-
-        # Batch scrape many URLs
-        loader = SpidraLoader(
-            urls=["https://a.com", "https://b.com", "https://c.com"],
-            mode="batch",
-            api_key="spd_...",
-        )
+    Lazy load:
+        ```python
+        for doc in loader.lazy_load():
+            print(doc.page_content[:100])
+            print(doc.metadata)
+        ```
     """
 
     def __init__(
         self,
-        url: Optional[str] = None,
+        url: str | None = None,
         *,
-        urls: Optional[List[str]] = None,
-        api_key: Optional[str] = None,
-        api_url: Optional[str] = None,
+        urls: list[str] | None = None,
+        api_key: str | None = None,
+        api_url: str | None = None,
         mode: Literal["scrape", "crawl", "batch"] = "scrape",
-        params: Optional[Dict[str, Any]] = None,
-        poll_options: Optional[PollOptions] = None,
+        params: dict | None = None,
     ) -> None:
-        resolved_key = api_key or os.environ.get("SPIDRA_API_KEY", "")
+        """Initialize the loader.
+
+        Args:
+            url: The URL to scrape or crawl (required for ``scrape``/``crawl``
+                modes).
+            urls: List of URLs (for ``batch`` mode or multi-URL scrape).
+            api_key: Spidra API key. Falls back to ``SPIDRA_API_KEY`` env var.
+            api_url: Override the base API URL.
+            mode: One of ``"scrape"`` (1–3 URLs), ``"crawl"`` (whole site), or
+                ``"batch"`` (up to 50 URLs in parallel).
+            params: Extra parameters forwarded to the underlying SDK method.
+        """
+        resolved_key = resolve_api_key(api_key)
         if not resolved_key:
-            raise ValueError(
-                "Spidra API key not found. Pass api_key= or set SPIDRA_API_KEY."
-            )
+            msg = "Spidra API key not found. Pass api_key= or set SPIDRA_API_KEY."
+            raise ValueError(msg)
 
         if mode in ("scrape", "crawl") and not url and not urls:
-            raise ValueError(f"'url' is required for mode='{mode}'")
+            msg = f"'url' is required for mode='{mode}'"
+            raise ValueError(msg)
         if mode == "batch" and not urls and not url:
-            raise ValueError("'urls' is required for mode='batch'")
+            msg = "'urls' is required for mode='batch'"
+            raise ValueError(msg)
 
         self._url = url
-        self._urls: List[str] = urls or ([url] if url else [])
+        self._urls: list[str] = urls or ([url] if url else [])
         self._mode = mode
-        self._params: Dict[str, Any] = params or {}
-        self._poll_options = poll_options
-        self._client = Spidra(api_key=resolved_key, api_url=api_url)
-
-    # ------------------------------------------------------------------
-    # BaseLoader interface
-    # ------------------------------------------------------------------
+        self._params: dict[str, Any] = params or {}
+        self._client = create_client(api_key=resolved_key, api_url=api_url)
 
     def lazy_load(self) -> Iterator[Document]:
+        """Lazily load documents from Spidra, one per result."""
         if self._mode == "scrape":
             yield from self._load_scrape()
         elif self._mode == "crawl":
@@ -174,21 +137,17 @@ class SpidraLoader(BaseLoader):
         elif self._mode == "batch":
             yield from self._load_batch()
         else:
-            raise ValueError(f"Unknown mode: {self._mode!r}")
-
-    # ------------------------------------------------------------------
-    # Mode implementations
-    # ------------------------------------------------------------------
+            msg = f"Unknown mode: {self._mode!r}"
+            raise ValueError(msg)
 
     def _load_scrape(self) -> Iterator[Document]:
+        from spidra import ScrapeParams, ScrapeUrl
+
         params = dict(self._params)
         prompt = params.pop("prompt", None)
 
         scrape_urls = [ScrapeUrl(url=u) for u in self._urls[:3]]
-        result = self._client.scrape(
-            ScrapeParams(urls=scrape_urls, prompt=prompt, **params),
-            **_poll_kwargs(self._poll_options),
-        )
+        result = self._client.scrape(ScrapeParams(urls=scrape_urls, prompt=prompt, **params))
 
         content_str = _to_str(result.content)
 
@@ -215,6 +174,8 @@ class SpidraLoader(BaseLoader):
             )
 
     def _load_crawl(self) -> Iterator[Document]:
+        from spidra import CrawlParams
+
         params = dict(self._params)
         crawl_instruction = params.pop("crawl_instruction", "Find all pages")
         transform_instruction = params.pop("transform_instruction", None)
@@ -226,26 +187,23 @@ class SpidraLoader(BaseLoader):
                 crawl_instruction=crawl_instruction,
                 transform_instruction=transform_instruction,
                 **params,
-            ),
-            **_poll_kwargs(self._poll_options),
+            )
         )
 
         for page in job.result:
             text = _to_str(page.data)
             if not text:
                 continue
-            metadata: Dict[str, Any] = {"source": page.url}
+            metadata: dict[str, Any] = {"source": page.url}
             if page.title:
                 metadata["title"] = page.title
             yield Document(page_content=text, metadata=metadata)
 
     def _load_batch(self) -> Iterator[Document]:
-        params = dict(self._params)
+        from spidra import BatchScrapeParams
 
-        batch = self._client.batch_scrape(
-            BatchScrapeParams(urls=self._urls, **params),
-            **_poll_kwargs(self._poll_options),
-        )
+        params = dict(self._params)
+        batch = self._client.batch_scrape(BatchScrapeParams(urls=self._urls, **params))
 
         for item in batch.items:
             if item.status != "completed" or item.result is None:

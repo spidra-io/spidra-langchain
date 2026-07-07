@@ -1,12 +1,30 @@
-from langchain_spidra import SpidraLoader
-from langchain_spidra.document_loaders import SpidraLoader as _SpidraLoaderDirect
+"""Unit tests for imports in ``langchain_spidra``."""
+
+from langchain_spidra import __all__
+
+EXPECTED_ALL = [
+    "SpidraBatchScrape",
+    "SpidraCrawl",
+    "SpidraScrape",
+    "SpidraLoader",
+    "__version__",
+]
 
 
-def test_import_spidra_loader() -> None:
-    assert SpidraLoader is _SpidraLoaderDirect
+def test_all_imports() -> None:
+    """Test that all expected names are exported in ``__all__``."""
+    assert sorted(EXPECTED_ALL) == sorted(__all__)
 
 
-def test_all_public_exports() -> None:
-    import langchain_spidra
+def test_loader_import() -> None:
+    """SpidraLoader is importable from the top-level package."""
+    from langchain_spidra import SpidraLoader  # noqa: F401
 
-    assert hasattr(langchain_spidra, "SpidraLoader")
+
+def test_tools_importable() -> None:
+    """All tool classes are importable from the top-level package."""
+    from langchain_spidra import SpidraBatchScrape, SpidraCrawl, SpidraScrape  # noqa: F401
+
+    assert SpidraScrape is not None
+    assert SpidraCrawl is not None
+    assert SpidraBatchScrape is not None

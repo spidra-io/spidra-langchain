@@ -1,26 +1,52 @@
-.PHONY: all install lint format tests integration_tests
+.PHONY: all format lint type test tests integration_tests help
 
+# Default target executed when no arguments are given to make.
 all: help
 
-help:
-	@echo "Available targets:"
-	@echo "  install           Install package and dev dependencies"
-	@echo "  lint              Run ruff linter"
-	@echo "  format            Run ruff formatter"
-	@echo "  tests             Run unit tests"
-	@echo "  integration_tests Run integration tests (requires SPIDRA_API_KEY)"
+# Define a variable for the test file path.
+TEST_FILE ?= tests/unit_tests/
+PYTEST_EXTRA ?=
 
-install:
-	pip install -e ".[dev]"
+integration_test integration_tests: TEST_FILE=tests/integration_tests/
+
+test tests:
+	pip install -q -e ".[test]" && pytest $(PYTEST_EXTRA) $(TEST_FILE)
+
+integration_test integration_tests:
+	pip install -q -e ".[test]" && pytest -v --tb=short $(PYTEST_EXTRA) $(TEST_FILE)
+
+######################
+# LINTING AND FORMATTING
+######################
+
+PYTHON_FILES=.
+MYPY_CACHE=.mypy_cache
 
 lint:
-	ruff check langchain_spidra tests
+	ruff check $(PYTHON_FILES)
+	ruff format $(PYTHON_FILES) --diff
 
 format:
-	ruff format langchain_spidra tests
+	ruff format $(PYTHON_FILES)
+	ruff check --fix $(PYTHON_FILES)
 
-tests:
-	pytest tests/unit_tests -v
+type:
+	mkdir -p $(MYPY_CACHE) && mypy $(PYTHON_FILES) --cache-dir $(MYPY_CACHE)
 
-integration_tests:
-	pytest tests/integration_tests -v
+check_imports: $(shell find langchain_spidra -name '*.py')
+	python ./scripts/check_imports.py $^
+
+######################
+# HELP
+######################
+
+help:
+	@echo '----'
+	@echo 'check_imports              - check imports'
+	@echo 'format                     - run code formatters'
+	@echo 'lint                       - run linters'
+	@echo 'type                       - run type checking'
+	@echo 'test                       - run unit tests'
+	@echo 'tests                      - run unit tests'
+	@echo 'integration_tests          - run integration tests'
+	@echo 'test TEST_FILE=<file>      - run all tests in file'
