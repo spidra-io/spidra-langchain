@@ -1,7 +1,7 @@
 """Unit tests for the Spidra tools (mocked client, no network)."""
 
 from dataclasses import dataclass
-from typing import Any, List, Optional
+from typing import Any, Optional
 from unittest.mock import MagicMock
 
 import pytest
@@ -25,7 +25,7 @@ class _FakeCrawlPage:
 
 @dataclass
 class _FakeCrawlJob:
-    result: List[_FakeCrawlPage]
+    result: list[_FakeCrawlPage]
     status: str = "completed"
 
 
@@ -38,7 +38,7 @@ class _FakeBatchItem:
 
 @dataclass
 class _FakeBatchResponse:
-    items: List[_FakeBatchItem]
+    items: list[_FakeBatchItem]
     status: str = "completed"
 
 

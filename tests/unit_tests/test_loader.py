@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, List, Optional
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
 from langchain_spidra.document_loaders import SpidraLoader, _split_multi_url_content, _to_str
-
 
 # ---------------------------------------------------------------------------
 # Fakes matching SDK response shapes
@@ -27,12 +26,12 @@ class _FakeScrapeResult:
 class _FakeCrawlPage:
     url: str
     data: Any
-    title: Optional[str] = None
+    title: str | None = None
 
 
 @dataclass
 class _FakeCrawlJob:
-    result: List[_FakeCrawlPage]
+    result: list[_FakeCrawlPage]
     status: str = "completed"
 
 
@@ -45,7 +44,7 @@ class _FakeBatchItem:
 
 @dataclass
 class _FakeBatchResponse:
-    items: List[_FakeBatchItem]
+    items: list[_FakeBatchItem]
     status: str = "completed"
 
 
@@ -292,9 +291,7 @@ def test_batch_yields_one_doc_per_completed_item(mock_client: MagicMock) -> None
             _FakeBatchItem("https://b.com", "Content B"),
         ]
     )
-    loader = SpidraLoader(
-        urls=["https://a.com", "https://b.com"], mode="batch", api_key="spd_test"
-    )
+    loader = SpidraLoader(urls=["https://a.com", "https://b.com"], mode="batch", api_key="spd_test")
     docs = list(loader.lazy_load())
     assert len(docs) == 2
     assert docs[0].page_content == "Content A"
@@ -308,9 +305,7 @@ def test_batch_failed_items_skipped(mock_client: MagicMock) -> None:
             _FakeBatchItem("https://b.com", None, status="failed"),
         ]
     )
-    loader = SpidraLoader(
-        urls=["https://a.com", "https://b.com"], mode="batch", api_key="spd_test"
-    )
+    loader = SpidraLoader(urls=["https://a.com", "https://b.com"], mode="batch", api_key="spd_test")
     docs = list(loader.lazy_load())
     assert len(docs) == 1
     assert docs[0].metadata["source"] == "https://a.com"
