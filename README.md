@@ -71,11 +71,12 @@ items = batch.invoke({"urls": ["https://a.com", "https://b.com"]})
 
 For complete, runnable implementations showing how to integrate Spidra into your LangChain applications, check out the [examples](examples/) directory:
 
+- [Examples README](examples/README.md): Instructions to setup credentials and run each example script.
 - [Scrape & Summarize](examples/scrape_and_chat.py): Scrape a single webpage and generate a summary using a ChatModel.
 - [Structured Extraction](examples/structured_extraction.py): Extract formatted, typed data structures from websites using Pydantic schemas.
 - [Tool-Calling Agent](examples/tool_calling_agent.py): Bind Spidra tools to an agent executor, allowing LLMs to search and browse dynamically.
 - [Crawl & RAG Pipeline](examples/rag_pipeline.py): Crawl site domains, chunk documents, index them, and run retrieval Q&A.
-- [Examples README](examples/README.md): Instructions to setup credentials and run each example script.
+
 
 ## Documentation
 
