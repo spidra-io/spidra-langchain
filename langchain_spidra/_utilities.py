@@ -11,7 +11,7 @@ import os
 from typing import Any
 
 from langchain_core.utils import convert_to_secret_str
-from spidra import Spidra
+from spidra import AsyncSpidra, Spidra
 
 #: Default Spidra API base URL when none is supplied via argument or env var.
 DEFAULT_API_URL: str = "https://api.spidra.io/api"
@@ -43,25 +43,46 @@ def create_client(api_key: str | None = None, api_url: str | None = None) -> Spi
     )
 
 
+def create_async_client(api_key: str | None = None, api_url: str | None = None) -> AsyncSpidra:
+    """Build an AsyncSpidra client from resolved credentials.
+
+    Args:
+        api_key: Explicit API key, or ``None`` to read from the environment.
+        api_url: Explicit API URL, or ``None`` to read from the environment.
+
+    Returns:
+        A configured :class:`spidra.AsyncSpidra` client.
+    """
+    return AsyncSpidra(
+        api_key=resolve_api_key(api_key),
+        api_url=resolve_api_url(api_url),
+    )
+
+
 def initialize_client(values: dict) -> dict:
     """Validate environment and instantiate the client for a pydantic tool.
 
     Resolves the API key into a ``SecretStr``, resolves the API URL, and
-    stores a ready client under ``"client"``. Intended for use from a
+    stores ready sync and async clients. Intended for use from a
     ``model_validator(mode="before")``.
 
     Args:
         values: The raw init values for a pydantic model.
 
     Returns:
-        The updated values dict with ``api_key``, ``api_url`` and ``client`` set.
+        The updated values dict with ``api_key``, ``api_url``, ``client`` and ``async_client`` set.
     """
     api_key = resolve_api_key(values.get("api_key"))
     values["api_key"] = convert_to_secret_str(api_key)
     api_url = resolve_api_url(values.get("api_url"))
     values["api_url"] = api_url
+    raw_key = values["api_key"].get_secret_value()
     values["client"] = Spidra(
-        api_key=values["api_key"].get_secret_value(),
+        api_key=raw_key,
+        api_url=api_url,
+    )
+    values["async_client"] = AsyncSpidra(
+        api_key=raw_key,
         api_url=api_url,
     )
     return values

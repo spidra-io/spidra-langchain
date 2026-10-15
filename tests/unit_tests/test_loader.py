@@ -8,7 +8,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from langchain_spidra.document_loaders import SpidraLoader, _split_multi_url_content, _to_str
+from langchain_spidra.document_loaders import (
+    SpidraLoader,
+    SpidraMapLoader,
+    SpidraParseLoader,
+    SpidraSearchLoader,
+    _split_multi_url_content,
+    _to_str,
+)
 
 # ---------------------------------------------------------------------------
 # Fakes matching SDK response shapes
@@ -27,12 +34,74 @@ class _FakeCrawlPage:
     url: str
     data: Any
     title: str | None = None
+    depth: int | None = None
+    parent_url: str | None = None
 
 
 @dataclass
 class _FakeCrawlJob:
     result: list[_FakeCrawlPage]
     status: str = "completed"
+    job_id: str = "crawl-123"
+    result_truncated: bool = False
+
+
+@dataclass
+class _FakeSearchResultItem:
+    title: str
+    url: str
+    position: int = 1
+    description: str | None = None
+    markdown: str | None = None
+    source: str | None = None
+    date: str | None = None
+    authors: str | None = None
+    doi: str | None = None
+
+
+@dataclass
+class _FakeSearchData:
+    web: list[_FakeSearchResultItem] | None = None
+    news: list[_FakeSearchResultItem] | None = None
+    research: list[_FakeSearchResultItem] | None = None
+    developer: list[_FakeSearchResultItem] | None = None
+    images: list[_FakeSearchResultItem] | None = None
+    videos: list[_FakeSearchResultItem] | None = None
+    extras: Any = None
+
+
+@dataclass
+class _FakeSearchResult:
+    data: _FakeSearchData
+
+
+@dataclass
+class _FakeMapLink:
+    url: str
+    title: str | None = None
+
+
+@dataclass
+class _FakeMapResult:
+    links: list[_FakeMapLink]
+    total: int = 1
+
+
+@dataclass
+class _FakeParsedPage:
+    page_number: int
+    markdown: str
+    method: str = "text"
+
+
+@dataclass
+class _FakeParseJob:
+    job_id: str = "parse-123"
+    status: str = "completed"
+    markdown: str | None = "# Doc Content"
+    total_pages: int | None = 1
+    pages: list[_FakeParsedPage] | None = None
+    json: Any = None
 
 
 @dataclass
@@ -326,3 +395,147 @@ def test_batch_load_returns_list(mock_client: MagicMock) -> None:
     )
     loader = SpidraLoader(urls=["https://a.com"], mode="batch", api_key="spd_test")
     assert isinstance(loader.load(), list)
+
+
+# ---------------------------------------------------------------------------
+# Crawl metadata & pagination
+# ---------------------------------------------------------------------------
+
+
+def test_crawl_metadata_depth_and_parent_url(mock_client: MagicMock) -> None:
+    mock_client.crawl.return_value = _FakeCrawlJob(
+        result=[
+            _FakeCrawlPage(
+                "https://example.com/sub",
+                "Sub page",
+                "Sub",
+                depth=2,
+                parent_url="https://example.com",
+            )
+        ]
+    )
+    loader = SpidraLoader("https://example.com", mode="crawl", api_key="spd_test")
+    docs = list(loader.lazy_load())
+    assert len(docs) == 1
+    assert docs[0].metadata["depth"] == 2
+    assert docs[0].metadata["parent_url"] == "https://example.com"
+
+
+# ---------------------------------------------------------------------------
+# Search mode
+# ---------------------------------------------------------------------------
+
+
+def test_search_mode_yields_documents(mock_client: MagicMock) -> None:
+    mock_client.search.return_value = _FakeSearchResult(
+        data=_FakeSearchData(
+            web=[
+                _FakeSearchResultItem(
+                    title="Doc A",
+                    url="https://example.com/a",
+                    description="Snippet A",
+                )
+            ]
+        )
+    )
+    loader = SpidraLoader(query="artificial intelligence", mode="search", api_key="spd_test")
+    docs = list(loader.lazy_load())
+    assert len(docs) == 1
+    assert docs[0].page_content == "Snippet A"
+    assert docs[0].metadata["source"] == "https://example.com/a"
+    assert docs[0].metadata["title"] == "Doc A"
+
+
+def test_search_loader_convenience_class(mock_client: MagicMock) -> None:
+    mock_client.search.return_value = _FakeSearchResult(
+        data=_FakeSearchData(
+            web=[
+                _FakeSearchResultItem(
+                    title="Doc B",
+                    url="https://example.com/b",
+                    markdown="# Markdown B",
+                )
+            ]
+        )
+    )
+    loader = SpidraSearchLoader("AI agents", api_key="spd_test")
+    docs = list(loader.lazy_load())
+    assert len(docs) == 1
+    assert docs[0].page_content == "# Markdown B"
+
+
+def test_search_requires_query() -> None:
+    with pytest.raises(ValueError, match="'query' is required"):
+        SpidraLoader(mode="search", api_key="spd_test")
+
+
+# ---------------------------------------------------------------------------
+# Map mode
+# ---------------------------------------------------------------------------
+
+
+def test_map_mode_yields_documents(mock_client: MagicMock) -> None:
+    mock_client.map.return_value = _FakeMapResult(
+        links=[
+            _FakeMapLink(url="https://docs.example.com/1", title="Page 1"),
+            _FakeMapLink(url="https://docs.example.com/2", title="Page 2"),
+        ]
+    )
+    loader = SpidraLoader("https://docs.example.com", mode="map", api_key="spd_test")
+    docs = list(loader.lazy_load())
+    assert len(docs) == 2
+    assert docs[0].page_content == "https://docs.example.com/1"
+    assert docs[0].metadata["title"] == "Page 1"
+
+
+def test_map_loader_convenience_class(mock_client: MagicMock) -> None:
+    mock_client.map.return_value = _FakeMapResult(
+        links=[_FakeMapLink(url="https://docs.example.com/a")]
+    )
+    loader = SpidraMapLoader("https://docs.example.com", api_key="spd_test")
+    docs = list(loader.lazy_load())
+    assert len(docs) == 1
+    assert docs[0].page_content == "https://docs.example.com/a"
+
+
+def test_map_requires_url() -> None:
+    with pytest.raises(ValueError, match="'url' is required"):
+        SpidraLoader(mode="map", api_key="spd_test")
+
+
+# ---------------------------------------------------------------------------
+# Parse mode
+# ---------------------------------------------------------------------------
+
+
+def test_parse_mode_yields_pages(mock_client: MagicMock) -> None:
+    mock_client.parse.return_value = _FakeParseJob(
+        pages=[
+            _FakeParsedPage(page_number=1, markdown="# Page 1"),
+            _FakeParsedPage(page_number=2, markdown="# Page 2"),
+        ]
+    )
+    loader = SpidraLoader(source="https://example.com/doc.pdf", mode="parse", api_key="spd_test")
+    docs = list(loader.lazy_load())
+    assert len(docs) == 2
+    assert docs[0].page_content == "# Page 1"
+    assert docs[0].metadata["page_number"] == 1
+    assert docs[1].page_content == "# Page 2"
+    assert docs[1].metadata["page_number"] == 2
+
+
+def test_parse_loader_convenience_class(mock_client: MagicMock) -> None:
+    mock_client.parse.return_value = _FakeParseJob(
+        markdown="# Full Document Content",
+        pages=None,
+    )
+    loader = SpidraParseLoader("document.pdf", api_key="spd_test")
+    docs = list(loader.lazy_load())
+    assert len(docs) == 1
+    assert docs[0].page_content == "# Full Document Content"
+
+
+def test_parse_requires_source() -> None:
+    with pytest.raises(ValueError, match="'source' is required"):
+        SpidraLoader(mode="parse", api_key="spd_test")
+

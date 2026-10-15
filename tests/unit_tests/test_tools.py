@@ -1,12 +1,20 @@
 """Unit tests for the Spidra tools (mocked client, no network)."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Optional
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from langchain_spidra import SpidraBatchScrape, SpidraCrawl, SpidraScrape
+from langchain_spidra import (
+    SpidraBatchScrape,
+    SpidraBulkScrape,
+    SpidraCrawl,
+    SpidraMap,
+    SpidraParse,
+    SpidraScrape,
+    SpidraSearch,
+)
 
 
 @dataclass
@@ -21,6 +29,8 @@ class _FakeCrawlPage:
     url: str
     data: Any
     title: Optional[str] = None
+    depth: Optional[int] = None
+    parent_url: Optional[str] = None
 
 
 @dataclass
@@ -42,6 +52,82 @@ class _FakeBatchResponse:
     status: str = "completed"
 
 
+@dataclass
+class _FakeSearchResultItem:
+    title: str
+    url: str
+    position: int = 1
+    description: Optional[str] = None
+    markdown: Optional[str] = None
+    source: Optional[str] = None
+    date: Optional[str] = None
+    authors: Optional[str] = None
+    doi: Optional[str] = None
+
+
+@dataclass
+class _FakeSearchData:
+    web: Optional[list[_FakeSearchResultItem]] = None
+    news: Optional[list[_FakeSearchResultItem]] = None
+    research: Optional[list[_FakeSearchResultItem]] = None
+    developer: Optional[list[_FakeSearchResultItem]] = None
+    images: Optional[list[_FakeSearchResultItem]] = None
+    videos: Optional[list[_FakeSearchResultItem]] = None
+    extras: Any = None
+
+
+@dataclass
+class _FakeSearchResult:
+    data: _FakeSearchData
+
+
+@dataclass
+class _FakeMapLink:
+    url: str
+    title: Optional[str] = None
+
+
+@dataclass
+class _FakeMapResult:
+    links: list[_FakeMapLink]
+    total: int = 1
+    sources: dict[str, int] = field(default_factory=lambda: {"sitemap": 1})
+    credits_used: int = 1
+
+
+@dataclass
+class _FakeParsedPage:
+    page_number: int
+    markdown: str
+    method: str = "text"
+
+
+@dataclass
+class _FakeParseJob:
+    job_id: str = "parse-123"
+    status: str = "completed"
+    markdown: Optional[str] = "# Doc Content"
+    total_pages: Optional[int] = 1
+    pages: Optional[list[_FakeParsedPage]] = None
+    json: Any = None
+
+
+@dataclass
+class _FakeBulkStats:
+    pages: int = 2
+    failed_pages: int = 0
+    raw_items: int = 2
+    unique_items: int = 2
+    duplicates_removed: int = 0
+    credits_used: int = 2
+
+
+@dataclass
+class _FakeBulkResult:
+    items: list[dict[str, Any]]
+    stats: _FakeBulkStats
+
+
 def test_scrape_tool_returns_content() -> None:
     """Scrape returns content dict with markdown string."""
     tool = SpidraScrape(api_key="spd-test")  # type: ignore[arg-type]
@@ -59,6 +145,19 @@ def test_scrape_tool_returns_content() -> None:
     }
     call = tool.client.scrape.call_args
     assert call.args[0] == "https://example.com"
+
+
+@pytest.mark.asyncio
+async def test_scrape_tool_arun() -> None:
+    """Async scrape tool execution."""
+    tool = SpidraScrape(api_key="spd-test")  # type: ignore[arg-type]
+    tool.async_client = MagicMock()
+    tool.async_client.scrape = AsyncMock(
+        return_value=_FakeScrapeResult(content="# Async Scrape")
+    )
+
+    result = await tool.ainvoke({"url": "https://example.com"})
+    assert result["content"] == "# Async Scrape"
 
 
 def test_scrape_tool_forwards_options() -> None:
@@ -101,26 +200,23 @@ def test_scrape_tool_serialises_dict_content() -> None:
 
 
 def test_crawl_tool_returns_page_list() -> None:
-    """Crawl returns one dict per page in ``job.result``."""
+    """Crawl returns a list of page dicts."""
     tool = SpidraCrawl(api_key="spd-test")  # type: ignore[arg-type]
     tool.client = MagicMock()
     tool.client.crawl.return_value = _FakeCrawlJob(
-        result=[
-            _FakeCrawlPage("https://example.com/a", "Page A", "A"),
-            _FakeCrawlPage("https://example.com/b", "Page B", None),
-        ]
+        result=[_FakeCrawlPage("https://example.com/a", "Page A", "A", depth=1)]
     )
 
-    result = tool.invoke({"url": "https://example.com", "max_pages": 10})
+    result = tool.invoke({"url": "https://example.com", "max_pages": 10, "respect_robots": True})
 
-    assert [p["url"] for p in result] == [
-        "https://example.com/a",
-        "https://example.com/b",
-    ]
+    assert len(result) == 1
+    assert result[0]["url"] == "https://example.com/a"
     assert result[0]["title"] == "A"
     assert result[0]["data"] == "Page A"
+    assert result[0]["depth"] == 1
     kwargs = tool.client.crawl.call_args.kwargs
     assert kwargs["max_pages"] == 10
+    assert kwargs["respect_robots"] is True
 
 
 def test_crawl_tool_drops_none_params() -> None:
@@ -156,12 +252,105 @@ def test_batch_scrape_tool_returns_item_list() -> None:
     assert call.args[0] == ["https://a.com", "https://b.com"]
 
 
+def test_search_tool_returns_results() -> None:
+    """Search tool returns structured results."""
+    tool = SpidraSearch(api_key="spd-test")  # type: ignore[arg-type]
+    tool.client = MagicMock()
+    tool.client.search.return_value = _FakeSearchResult(
+        data=_FakeSearchData(
+            web=[
+                _FakeSearchResultItem(
+                    title="Doc A",
+                    url="https://example.com/a",
+                    description="Snippet A",
+                )
+            ]
+        )
+    )
+
+    result = tool.invoke({"query": "AI research", "limit": 5})
+
+    assert result["query"] == "AI research"
+    assert len(result["results"]) == 1
+    assert result["results"][0]["title"] == "Doc A"
+    assert result["results"][0]["url"] == "https://example.com/a"
+    assert result["results"][0]["content"] == "Snippet A"
+
+
+def test_map_tool_returns_links() -> None:
+    """Map tool returns discovered links."""
+    tool = SpidraMap(api_key="spd-test")  # type: ignore[arg-type]
+    tool.client = MagicMock()
+    tool.client.map.return_value = _FakeMapResult(
+        links=[_FakeMapLink(url="https://docs.example.com/guide", title="Guide")],
+        total=1,
+    )
+
+    result = tool.invoke({"url": "https://docs.example.com", "limit": 50})
+
+    assert result["total"] == 1
+    assert len(result["links"]) == 1
+    assert result["links"][0]["url"] == "https://docs.example.com/guide"
+
+
+def test_parse_tool_returns_pages() -> None:
+    """Parse tool returns parsed pages."""
+    tool = SpidraParse(api_key="spd-test")  # type: ignore[arg-type]
+    tool.client = MagicMock()
+    tool.client.parse.return_value = _FakeParseJob(
+        markdown="# Full Doc",
+        pages=[_FakeParsedPage(page_number=1, markdown="# Page 1")],
+    )
+
+    result = tool.invoke({"source": "https://example.com/doc.pdf"})
+
+    assert result["markdown"] == "# Full Doc"
+    assert len(result["pages"]) == 1
+    assert result["pages"][0]["markdown"] == "# Page 1"
+
+
+def test_bulk_scrape_tool_returns_items() -> None:
+    """BulkScrape tool returns items and stats."""
+    tool = SpidraBulkScrape(api_key="spd-test")  # type: ignore[arg-type]
+    tool.client = MagicMock()
+    tool.client.bulk_scrape.return_value = _FakeBulkResult(
+        items=[{"id": "1", "name": "Item 1"}],
+        stats=_FakeBulkStats(),
+    )
+
+    result = tool.invoke(
+        {
+            "template": "https://example.com/{id}",
+            "variables": {"id": ["1"]},
+            "items_path": "items",
+            "dedupe_by": "id",
+        }
+    )
+
+    assert len(result["items"]) == 1
+    assert result["items"][0]["id"] == "1"
+    assert result["stats"]["pages"] == 2
+
+
 @pytest.mark.parametrize(
     ("tool_cls", "method", "params"),
     [
         (SpidraScrape, "scrape", {"url": "https://example.com"}),
         (SpidraCrawl, "crawl", {"url": "https://example.com"}),
         (SpidraBatchScrape, "batch_scrape", {"urls": ["https://example.com"]}),
+        (SpidraSearch, "search", {"query": "test"}),
+        (SpidraMap, "map", {"url": "https://example.com"}),
+        (SpidraParse, "parse", {"source": "https://example.com/doc.pdf"}),
+        (
+            SpidraBulkScrape,
+            "bulk_scrape",
+            {
+                "template": "https://example.com/{id}",
+                "variables": {"id": ["1"]},
+                "items_path": "items",
+                "dedupe_by": "id",
+            },
+        ),
     ],
 )
 def test_tool_returns_error_string_on_exception(

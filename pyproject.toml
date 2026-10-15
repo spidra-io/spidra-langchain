@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langchain-spidra"
-version = "0.1.2"
+version = "0.2.0"
 description = "An integration package connecting Spidra and LangChain"
 license = { text = "MIT" }
 readme = "README.md"
@@ -22,7 +22,7 @@ classifiers = [
 ]
 requires-python = ">=3.9,<4.0.0"
 dependencies = [
-    "spidra>=0.3.0",
+    "spidra>=0.5.1",
     "langchain-core>=0.3.0,<2.0.0",
 ]
 

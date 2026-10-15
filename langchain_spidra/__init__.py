@@ -2,8 +2,22 @@
 
 from importlib import metadata
 
-from langchain_spidra.document_loaders import SpidraLoader
-from langchain_spidra.tools import SpidraBatchScrape, SpidraCrawl, SpidraScrape
+from langchain_spidra.document_loaders import (
+    SpidraLoader,
+    SpidraMapLoader,
+    SpidraParseLoader,
+    SpidraSearchLoader,
+)
+from langchain_spidra.retrievers import SpidraRetriever
+from langchain_spidra.tools import (
+    SpidraBatchScrape,
+    SpidraBulkScrape,
+    SpidraCrawl,
+    SpidraMap,
+    SpidraParse,
+    SpidraScrape,
+    SpidraSearch,
+)
 
 try:
     __version__ = metadata.version(__package__)
@@ -14,8 +28,16 @@ del metadata  # optional, avoids polluting the results of dir(__package__)
 
 __all__ = [
     "SpidraBatchScrape",
+    "SpidraBulkScrape",
     "SpidraCrawl",
-    "SpidraScrape",
     "SpidraLoader",
+    "SpidraMap",
+    "SpidraMapLoader",
+    "SpidraParse",
+    "SpidraParseLoader",
+    "SpidraRetriever",
+    "SpidraScrape",
+    "SpidraSearch",
+    "SpidraSearchLoader",
     "__version__",
 ]

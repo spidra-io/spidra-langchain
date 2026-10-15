@@ -9,7 +9,15 @@ from typing import Any
 
 from langchain_tests.unit_tests import ToolsUnitTests
 
-from langchain_spidra import SpidraBatchScrape, SpidraCrawl, SpidraScrape
+from langchain_spidra import (
+    SpidraBatchScrape,
+    SpidraBulkScrape,
+    SpidraCrawl,
+    SpidraMap,
+    SpidraParse,
+    SpidraScrape,
+    SpidraSearch,
+)
 
 _ENV = {"SPIDRA_API_KEY": "spd-test"}
 _EXPECTED = {"api_key": "spd-test"}
@@ -85,4 +93,89 @@ class TestSpidraBatchScrapeUnit(ToolsUnitTests):
     @property
     def init_from_env_params(self) -> tuple[dict, dict, dict]:
         """Env vars, init args, and expected attrs for env init."""
+        return _ENV, {}, _EXPECTED
+
+
+class TestSpidraSearchUnit(ToolsUnitTests):
+    """Standard unit tests for ``SpidraSearch``."""
+
+    @property
+    def tool_constructor(self) -> type[SpidraSearch]:
+        return SpidraSearch
+
+    @property
+    def tool_constructor_params(self) -> dict[str, Any]:
+        return _PARAMS
+
+    @property
+    def tool_invoke_params_example(self) -> dict[str, Any]:
+        return {"query": "machine learning breakthroughs"}
+
+    @property
+    def init_from_env_params(self) -> tuple[dict, dict, dict]:
+        return _ENV, {}, _EXPECTED
+
+
+class TestSpidraMapUnit(ToolsUnitTests):
+    """Standard unit tests for ``SpidraMap``."""
+
+    @property
+    def tool_constructor(self) -> type[SpidraMap]:
+        return SpidraMap
+
+    @property
+    def tool_constructor_params(self) -> dict[str, Any]:
+        return _PARAMS
+
+    @property
+    def tool_invoke_params_example(self) -> dict[str, Any]:
+        return {"url": "https://example.com"}
+
+    @property
+    def init_from_env_params(self) -> tuple[dict, dict, dict]:
+        return _ENV, {}, _EXPECTED
+
+
+class TestSpidraParseUnit(ToolsUnitTests):
+    """Standard unit tests for ``SpidraParse``."""
+
+    @property
+    def tool_constructor(self) -> type[SpidraParse]:
+        return SpidraParse
+
+    @property
+    def tool_constructor_params(self) -> dict[str, Any]:
+        return _PARAMS
+
+    @property
+    def tool_invoke_params_example(self) -> dict[str, Any]:
+        return {"source": "https://example.com/document.pdf"}
+
+    @property
+    def init_from_env_params(self) -> tuple[dict, dict, dict]:
+        return _ENV, {}, _EXPECTED
+
+
+class TestSpidraBulkScrapeUnit(ToolsUnitTests):
+    """Standard unit tests for ``SpidraBulkScrape``."""
+
+    @property
+    def tool_constructor(self) -> type[SpidraBulkScrape]:
+        return SpidraBulkScrape
+
+    @property
+    def tool_constructor_params(self) -> dict[str, Any]:
+        return _PARAMS
+
+    @property
+    def tool_invoke_params_example(self) -> dict[str, Any]:
+        return {
+            "template": "https://example.com/{id}",
+            "variables": {"id": ["1", "2"]},
+            "items_path": "items",
+            "dedupe_by": "id",
+        }
+
+    @property
+    def init_from_env_params(self) -> tuple[dict, dict, dict]:
         return _ENV, {}, _EXPECTED

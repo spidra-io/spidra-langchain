@@ -8,5 +8,5 @@ from pytest_socket import disable_socket
 
 
 def pytest_runtest_setup() -> None:
-    """Disable sockets for all unit tests (no network allowed)."""
-    disable_socket()
+    """Disable sockets for all unit tests (no network), allowing unix sockets."""
+    disable_socket(allow_unix_socket=True)
