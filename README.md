@@ -7,9 +7,23 @@ This package contains the official LangChain integration with [Spidra](https://s
 
 ---
 
+## What's New in v0.3.0
+
+`langchain-spidra` v0.3.0 brings full parity with the `spidra` Python SDK v0.6.0:
+
+| Feature | Description | Tools |
+| :--- | :--- | :--- |
+| **Templates** | Run 100+ ready-made data-extraction workflows (Google Maps, Amazon, LinkedIn, Reddit, etc.) | `SpidraRunTemplate` |
+| **Presets** | Run a saved named job (template preset or tool preset) by its ID | `SpidraRunPreset` |
+| **Monitors** | Fetch the latest change-detection check from a scheduled monitor | `SpidraMonitor` |
+
+All three new tools support both sync (`invoke`) and async (`ainvoke`) execution.
+
+---
+
 ## What's New in v0.2.0
 
-`langchain-spidra` v0.2.0 brings full parity with the `spidra` Python SDK v0.5.1+:
+`langchain-spidra` v0.2.0 brought full parity with the `spidra` Python SDK v0.5.1+:
 
 | Feature | Description | Tools / Loaders |
 | :--- | :--- | :--- |
@@ -50,8 +64,11 @@ Every Spidra capability is available as a LangChain `BaseTool` that can be bound
 - `SpidraParse`: Multi-format document parser (PDF, DOCX, XLSX, etc.).
 - `SpidraBatchScrape`: Parallel scraping across explicit URL lists.
 - `SpidraBulkScrape`: URL template pattern scraping with variable matrices.
+- `SpidraRunTemplate`: Run a ready-made data-extraction template (Google Maps, Amazon, LinkedIn, etc.).
+- `SpidraRunPreset`: Run a saved named preset by its ID.
+- `SpidraMonitor`: Fetch the latest change-detection check from a scheduled monitor.
 
-### Usage Example
+### Core Tools Usage Example
 
 ```python
 from langchain_spidra import (
@@ -102,16 +119,61 @@ bulk = bulk_tool.invoke({
 })
 ```
 
+### Templates, Presets & Monitors (v0.3.0)
+
+```python
+from langchain_spidra import SpidraRunTemplate, SpidraRunPreset, SpidraMonitor
+
+# Run a ready-made template — returns structured rows
+template_tool = SpidraRunTemplate()
+result = template_tool.invoke({
+    "slug": "google-maps-search",
+    "inputs": {
+        "query": "dentist in Lagos",
+        "limit": 20,
+    },
+})
+# result["rows"] — list of place dicts (name, address, rating, phone, website, …)
+# result["status"] — "completed" | "partial" | "failed"
+# result["credits_used"] — credits charged for this run
+
+# Run a saved preset by its ID
+preset_tool = SpidraRunPreset()
+preset_result = preset_tool.invoke({
+    "preset_id": "abc123",
+    # Optional: override specific inputs for this run only
+    "overrides": {"limit": 50},
+})
+# preset_result["run"] — TemplateRun fields when it's a template preset
+# preset_result["result"] — raw result dict when it's a tool preset
+
+# Check the latest change-detection result from a monitor
+monitor_tool = SpidraMonitor()
+check = monitor_tool.invoke({"monitor_id": "mon_abc123"})
+# check["has_changes"] — True when something changed since the last check
+# check["latest_check"]["summary"] — AI-generated summary of what changed
+# check["last_change_at"] — ISO timestamp of the last detected change
+```
+
 ### Async Agent Example
 
 ```python
 import asyncio
-from langchain_spidra import SpidraSearch, SpidraScrape
+from langchain_spidra import SpidraSearch, SpidraScrape, SpidraRunTemplate
 
 async def main():
+    # Search
     search = SpidraSearch()
     results = await search.ainvoke({"query": "Autonomous coding agents", "limit": 3})
     print(results)
+
+    # Run a template asynchronously
+    template = SpidraRunTemplate()
+    run = await template.ainvoke({
+        "slug": "amazon-product-search",
+        "inputs": {"query": "wireless headphones", "limit": 10},
+    })
+    print(f"Got {run['row_count']} products")
 
 asyncio.run(main())
 ```

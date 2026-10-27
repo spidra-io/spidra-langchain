@@ -9,9 +9,12 @@ EXPECTED_ALL = [
     "SpidraLoader",
     "SpidraMap",
     "SpidraMapLoader",
+    "SpidraMonitor",
     "SpidraParse",
     "SpidraParseLoader",
     "SpidraRetriever",
+    "SpidraRunPreset",
+    "SpidraRunTemplate",
     "SpidraScrape",
     "SpidraSearch",
     "SpidraSearchLoader",
@@ -46,7 +49,10 @@ def test_tools_importable() -> None:
         SpidraBulkScrape,
         SpidraCrawl,
         SpidraMap,
+        SpidraMonitor,
         SpidraParse,
+        SpidraRunPreset,
+        SpidraRunTemplate,
         SpidraScrape,
         SpidraSearch,
     )
@@ -58,6 +64,9 @@ def test_tools_importable() -> None:
     assert SpidraMap is not None
     assert SpidraParse is not None
     assert SpidraBulkScrape is not None
+    assert SpidraRunTemplate is not None
+    assert SpidraRunPreset is not None
+    assert SpidraMonitor is not None
 
 
 def test_retriever_importable() -> None:

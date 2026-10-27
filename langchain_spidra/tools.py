@@ -962,3 +962,277 @@ class SpidraBulkScrape(_SpidraBaseTool):
             }
         except Exception as e:
             return repr(e)
+
+
+class SpidraRunTemplate(_SpidraBaseTool):
+    """Run a ready-made Spidra template and wait for its results.
+
+    Templates are pre-built data extraction workflows (e.g. Google Maps leads,
+    Amazon products, LinkedIn profiles). Pass the template ``slug`` and the
+    required ``inputs`` dict; the tool runs the job and returns the rows.
+
+    Setup:
+        Install ``langchain-spidra`` and set ``SPIDRA_API_KEY``.
+
+    Instantiation:
+        ```python
+        from langchain_spidra import SpidraRunTemplate
+
+        tool = SpidraRunTemplate()
+        result = tool.invoke({
+            "slug": "google-maps-search",
+            "inputs": {"query": "dentist in Lagos", "limit": 20},
+        })
+        ```
+    """
+
+    name: str = "spidra_run_template"
+    description: str = (
+        "Run a ready-made Spidra data-extraction template (e.g. Google Maps, Amazon, LinkedIn) "
+        "and return the structured rows. Provide the template 'slug' and an 'inputs' dict with "
+        "the fields the template requires."
+    )
+
+    def _run(
+        self,
+        slug: str,
+        inputs: dict[str, Any],
+        run_manager: CallbackManagerForToolRun | None = None,
+    ) -> dict[str, Any] | str:
+        """Run template synchronously and wait for completion."""
+        try:
+            run = self.client.run_template(slug, inputs)
+            return {
+                "run_id": run.run_id,
+                "status": run.status,
+                "template": run.template,
+                "tool": run.tool,
+                "row_count": run.row_count,
+                "url_count": run.url_count,
+                "credits_used": run.credits_used,
+                "rows": run.rows or [],
+                "failures": run.failures,
+                "error": run.error,
+            }
+        except Exception as e:
+            return repr(e)
+
+    async def _arun(
+        self,
+        slug: str,
+        inputs: dict[str, Any],
+        run_manager: AsyncCallbackManagerForToolRun | None = None,
+    ) -> dict[str, Any] | str:
+        """Run template asynchronously and wait for completion."""
+        try:
+            client = self.async_client
+            if client is None:
+                return await asyncio.to_thread(self._run, slug=slug, inputs=inputs)
+            run = await client.run_template(slug, inputs)
+            return {
+                "run_id": run.run_id,
+                "status": run.status,
+                "template": run.template,
+                "tool": run.tool,
+                "row_count": run.row_count,
+                "url_count": run.url_count,
+                "credits_used": run.credits_used,
+                "rows": run.rows or [],
+                "failures": run.failures,
+                "error": run.error,
+            }
+        except Exception as e:
+            return repr(e)
+
+
+class SpidraRunPreset(_SpidraBaseTool):
+    """Run a saved Spidra preset (template preset or tool preset).
+
+    Presets are named, reusable jobs. A template preset stores a template slug
+    and its inputs; a tool preset stores the request body for one tool
+    (scrape, batch, crawl, map, search, or parse).
+
+    Setup:
+        Install ``langchain-spidra`` and set ``SPIDRA_API_KEY``.
+
+    Instantiation:
+        ```python
+        from langchain_spidra import SpidraRunPreset
+
+        tool = SpidraRunPreset()
+        result = tool.invoke({"preset_id": "abc123"})
+        ```
+    """
+
+    name: str = "spidra_run_preset"
+    description: str = (
+        "Run a saved Spidra preset by its ID. A preset is a named, reusable job — either a "
+        "template with saved inputs or a specific tool configuration. Provide the 'preset_id'. "
+        "Optionally supply 'overrides' (a dict) to override individual inputs for this run."
+    )
+
+    def _run(
+        self,
+        preset_id: str,
+        overrides: dict[str, Any] | None = None,
+        run_manager: CallbackManagerForToolRun | None = None,
+    ) -> dict[str, Any] | str:
+        """Run preset synchronously."""
+        try:
+            response = self.client.run_preset(preset_id, overrides=overrides, wait=True)
+            result: dict[str, Any] = {
+                "preset_id": response.preset_id,
+                "tool": response.tool,
+            }
+            if response.run is not None:
+                run = response.run
+                result["run"] = {
+                    "run_id": run.run_id,
+                    "status": run.status,
+                    "template": run.template,
+                    "tool": run.tool,
+                    "row_count": run.row_count,
+                    "credits_used": run.credits_used,
+                    "rows": run.rows or [],
+                    "failures": run.failures,
+                    "error": run.error,
+                }
+            else:
+                result["result"] = response.result
+            return result
+        except Exception as e:
+            return repr(e)
+
+    async def _arun(
+        self,
+        preset_id: str,
+        overrides: dict[str, Any] | None = None,
+        run_manager: AsyncCallbackManagerForToolRun | None = None,
+    ) -> dict[str, Any] | str:
+        """Run preset asynchronously."""
+        try:
+            client = self.async_client
+            if client is None:
+                return await asyncio.to_thread(
+                    self._run, preset_id=preset_id, overrides=overrides
+                )
+            response = await client.run_preset(preset_id, overrides=overrides, wait=True)
+            result: dict[str, Any] = {
+                "preset_id": response.preset_id,
+                "tool": response.tool,
+            }
+            if response.run is not None:
+                run = response.run
+                result["run"] = {
+                    "run_id": run.run_id,
+                    "status": run.status,
+                    "template": run.template,
+                    "tool": run.tool,
+                    "row_count": run.row_count,
+                    "credits_used": run.credits_used,
+                    "rows": run.rows or [],
+                    "failures": run.failures,
+                    "error": run.error,
+                }
+            else:
+                result["result"] = response.result
+            return result
+        except Exception as e:
+            return repr(e)
+
+
+class SpidraMonitor(_SpidraBaseTool):
+    """Check a Spidra monitor for the latest changes on a schedule.
+
+    Monitors run data sources (templates, presets, or URL lists) on a schedule
+    and alert when something changes. This tool retrieves the most recent check
+    result for a given monitor ID so an agent can react to the detected changes.
+
+    Setup:
+        Install ``langchain-spidra`` and set ``SPIDRA_API_KEY``.
+
+    Instantiation:
+        ```python
+        from langchain_spidra import SpidraMonitor
+
+        tool = SpidraMonitor()
+        result = tool.invoke({"monitor_id": "mon_abc123"})
+        ```
+    """
+
+    name: str = "spidra_monitor"
+    description: str = (
+        "Retrieve the latest check result for a Spidra monitor. Monitors run data sources on a "
+        "schedule and detect changes (new, removed, or updated rows). Provide the 'monitor_id'. "
+        "Returns the most recent check summary including what was added, changed, or removed."
+    )
+
+    def _run(
+        self,
+        monitor_id: str,
+        run_manager: CallbackManagerForToolRun | None = None,
+    ) -> dict[str, Any] | str:
+        """Fetch the latest monitor check result synchronously."""
+        try:
+            monitor = self.client.get_monitor(monitor_id)
+            checks = self.client.list_monitor_checks(monitor_id, limit=1)
+            latest = checks.checks[0] if checks.checks else None
+            result: dict[str, Any] = {
+                "monitor_id": monitor_id,
+                "name": monitor.name,
+                "status": monitor.status,
+                "last_check_at": monitor.last_check_at,
+                "last_change_at": monitor.last_change_at,
+                "last_summary": monitor.last_summary,
+            }
+            if latest is not None:
+                result["latest_check"] = {
+                    "check_id": latest.id,
+                    "trigger": latest.trigger,
+                    "status": latest.status,
+                    "has_changes": latest.has_changes,
+                    "summary": latest.summary,
+                    "credits_used": latest.credits_used,
+                    "started_at": latest.started_at,
+                    "finished_at": latest.finished_at,
+                }
+            return result
+        except Exception as e:
+            return repr(e)
+
+    async def _arun(
+        self,
+        monitor_id: str,
+        run_manager: AsyncCallbackManagerForToolRun | None = None,
+    ) -> dict[str, Any] | str:
+        """Fetch the latest monitor check result asynchronously."""
+        try:
+            client = self.async_client
+            if client is None:
+                return await asyncio.to_thread(self._run, monitor_id=monitor_id)
+            monitor = await client.get_monitor(monitor_id)
+            checks = await client.list_monitor_checks(monitor_id, limit=1)
+            latest = checks.checks[0] if checks.checks else None
+            result: dict[str, Any] = {
+                "monitor_id": monitor_id,
+                "name": monitor.name,
+                "status": monitor.status,
+                "last_check_at": monitor.last_check_at,
+                "last_change_at": monitor.last_change_at,
+                "last_summary": monitor.last_summary,
+            }
+            if latest is not None:
+                result["latest_check"] = {
+                    "check_id": latest.id,
+                    "trigger": latest.trigger,
+                    "status": latest.status,
+                    "has_changes": latest.has_changes,
+                    "summary": latest.summary,
+                    "credits_used": latest.credits_used,
+                    "started_at": latest.started_at,
+                    "finished_at": latest.finished_at,
+                }
+            return result
+        except Exception as e:
+            return repr(e)
+
