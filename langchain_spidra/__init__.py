@@ -1,7 +1,5 @@
 """LangChain integration for Spidra."""
 
-from importlib import metadata
-
 from langchain_spidra.document_loaders import (
     SpidraLoader,
     SpidraMapLoader,
@@ -23,11 +21,17 @@ from langchain_spidra.tools import (
 )
 
 try:
-    __version__ = metadata.version(__package__)
-except metadata.PackageNotFoundError:
-    # Case where package metadata is not available.
+    import importlib.metadata as _metadata
+
+    try:
+        __version__ = _metadata.version(__package__ or "langchain-spidra")
+    except _metadata.PackageNotFoundError:
+        __version__ = ""
+    finally:
+        del _metadata
+except Exception:
     __version__ = ""
-del metadata  # optional, avoids polluting the results of dir(__package__)
+
 
 __all__ = [
     "SpidraBatchScrape",

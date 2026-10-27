@@ -11,7 +11,10 @@ from langchain_spidra import (
     SpidraBulkScrape,
     SpidraCrawl,
     SpidraMap,
+    SpidraMonitor,
     SpidraParse,
+    SpidraRunPreset,
+    SpidraRunTemplate,
     SpidraScrape,
     SpidraSearch,
 )
@@ -332,6 +335,102 @@ def test_bulk_scrape_tool_returns_items() -> None:
     assert result["stats"]["pages"] == 2
 
 
+@dataclass
+class _FakeTemplateRun:
+    run_id: str = "run_123"
+    status: str = "completed"
+    template: str = "google-maps-search"
+    tool: str = "template"
+    row_count: int = 1
+    url_count: int = 1
+    credits_used: int = 2
+    rows: list[dict[str, Any]] = field(default_factory=lambda: [{"title": "Shop 1"}])
+    failures: list[Any] = field(default_factory=list)
+    error: Optional[str] = None
+
+
+@dataclass
+class _FakePresetRun:
+    preset_id: str = "pre_123"
+    tool: str = "template"
+    run: Optional[_FakeTemplateRun] = None
+    result: Any = None
+
+
+@dataclass
+class _FakeMonitor:
+    id: str = "mon_123"
+    name: str = "Price Tracker"
+    status: str = "active"
+    last_check_at: Optional[str] = "2026-10-27T10:00:00Z"
+    last_change_at: Optional[str] = "2026-10-27T10:00:00Z"
+    last_summary: Optional[str] = "Price dropped by 10%"
+
+
+@dataclass
+class _FakeMonitorCheck:
+    id: str = "chk_123"
+    trigger: str = "schedule"
+    status: str = "completed"
+    has_changes: bool = True
+    summary: str = "Price dropped"
+    credits_used: int = 1
+    started_at: str = "2026-10-27T10:00:00Z"
+    finished_at: str = "2026-10-27T10:00:05Z"
+
+
+@dataclass
+class _FakeMonitorCheckList:
+    checks: list[_FakeMonitorCheck] = field(default_factory=list)
+
+
+def test_run_template_tool_returns_rows() -> None:
+    """RunTemplate tool returns extracted rows and metadata."""
+    tool = SpidraRunTemplate(api_key="spd-test")  # type: ignore[arg-type]
+    tool.client = MagicMock()
+    tool.client.run_template.return_value = _FakeTemplateRun()
+
+    result = tool.invoke({"slug": "google-maps-search", "inputs": {"query": "dentist"}})
+
+    assert result["status"] == "completed"
+    assert result["row_count"] == 1
+    assert result["rows"] == [{"title": "Shop 1"}]
+    call = tool.client.run_template.call_args
+    assert call.args[0] == "google-maps-search"
+    assert call.args[1] == {"query": "dentist"}
+
+
+def test_run_preset_tool_returns_result() -> None:
+    """RunPreset tool returns executed preset run."""
+    tool = SpidraRunPreset(api_key="spd-test")  # type: ignore[arg-type]
+    tool.client = MagicMock()
+    tool.client.run_preset.return_value = _FakePresetRun(run=_FakeTemplateRun())
+
+    result = tool.invoke({"preset_id": "pre_123"})
+
+    assert result["preset_id"] == "pre_123"
+    assert result["run"]["run_id"] == "run_123"
+    call = tool.client.run_preset.call_args
+    assert call.args[0] == "pre_123"
+
+
+def test_monitor_tool_returns_latest_check() -> None:
+    """Monitor tool returns monitor details and latest check."""
+    tool = SpidraMonitor(api_key="spd-test")  # type: ignore[arg-type]
+    tool.client = MagicMock()
+    tool.client.get_monitor.return_value = _FakeMonitor()
+    tool.client.list_monitor_checks.return_value = _FakeMonitorCheckList(
+        checks=[_FakeMonitorCheck()]
+    )
+
+    result = tool.invoke({"monitor_id": "mon_123"})
+
+    assert result["monitor_id"] == "mon_123"
+    assert result["name"] == "Price Tracker"
+    assert result["latest_check"]["has_changes"] is True
+    assert result["latest_check"]["summary"] == "Price dropped"
+
+
 @pytest.mark.parametrize(
     ("tool_cls", "method", "params"),
     [
@@ -350,6 +449,21 @@ def test_bulk_scrape_tool_returns_items() -> None:
                 "items_path": "items",
                 "dedupe_by": "id",
             },
+        ),
+        (
+            SpidraRunTemplate,
+            "run_template",
+            {"slug": "google-maps-search", "inputs": {"query": "dentist"}},
+        ),
+        (
+            SpidraRunPreset,
+            "run_preset",
+            {"preset_id": "pre_123"},
+        ),
+        (
+            SpidraMonitor,
+            "get_monitor",
+            {"monitor_id": "mon_123"},
         ),
     ],
 )
