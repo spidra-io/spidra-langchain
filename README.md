@@ -1,6 +1,7 @@
 # langchain-spidra
 
-[![PyPI - Version](https://img.shields.io/pypi/v/langchain-spidra?label=%20)](https://pypi.org/project/langchain-spidra/#history)
+[![PyPI - Version](https://img.shields.io/pypi/v/langchain-spidra)](https://pypi.org/project/langchain-spidra/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/langchain-spidra)](https://pypi.org/project/langchain-spidra/)
 [![PyPI - License](https://img.shields.io/pypi/l/langchain-spidra)](https://opensource.org/licenses/MIT)
 
 Official LangChain integration package for [Spidra](https://spidra.io), an AI-powered web data platform for web scraping, intelligent crawling, search, document parsing, ready-made extraction templates, and scheduled monitors.
